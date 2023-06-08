@@ -2,11 +2,15 @@
 #include <sys/socket.h>
 #include <stdlib.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
 #include <string.h>
 #include <unistd.h>
+#include <pthread.h>
 
-#define MAX_CLIENTS 16
+#define MAX_CLIENTS 100 // Maximum number of clients
+
+int clients[MAX_CLIENTS]; // Array to store client sockets
+int client_count = 0; // Number of connected clients
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 struct sending_packet {
     char sender[1024];
@@ -14,15 +18,17 @@ struct sending_packet {
     char msg[1024];
 };
 
-void handle_client(int sock);
-struct sending_packet receive_sock(int sock);
-void send_sock(int sock, struct sending_packet pck);
+void *handle_thread(void *arg);
+void send_message(struct sending_packet pck, int sender_sock);
 
 int main() {
     int s_sock_fd, new_sock_fd;
     struct sockaddr_in s_address, c_address;
     int addrlen = sizeof(s_address);
     int check;
+    pthread_t t_id;
+
+    int port = 8080;
 
     s_sock_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (s_sock_fd == -1) {
@@ -33,7 +39,7 @@ int main() {
     memset(&s_address, '0', addrlen);
     s_address.sin_family = AF_INET;
     s_address.sin_addr.s_addr = INADDR_ANY;
-    s_address.sin_port = htons(8080);
+    s_address.sin_port = htons(port);
 
     check = bind(s_sock_fd, (struct sockaddr *)&s_address, sizeof(s_address));
     if (check == -1) {
@@ -47,7 +53,10 @@ int main() {
         exit(1);
     }
 
-    printf("Server started. Waiting for connections...\n");
+    printf("<<<< Chat server >>>>\n");
+    printf("Server Port: %d\n", port);
+    printf("Max Client: %d\n", MAX_CLIENTS);
+    printf("<<<< Log >>>>\n");
 
     while (1) {
         new_sock_fd = accept(s_sock_fd, (struct sockaddr *)&c_address, (socklen_t *)&addrlen);
@@ -56,12 +65,9 @@ int main() {
             exit(1);
         }
 
-        if (fork() == 0) {
-            close(s_sock_fd);
-            handle_client(new_sock_fd);
-            exit(0);
-        } else {
-            close(new_sock_fd);
+        if (pthread_create(&t_id, NULL, handle_thread, (void *)&new_sock_fd) != 0) {
+            perror("pthread_create failed: ");
+            exit(1);
         }
     }
 
@@ -69,37 +75,61 @@ int main() {
     return 0;
 }
 
-void handle_client(int sock) {
-    struct sending_packet pck;
-    int flag = 0;
+void *handle_thread(void *arg) {
+    int sock = *((int *)arg);
+    struct sending_packet packet;
+
+    pthread_mutex_lock(&mutex);
+    clients[client_count++] = sock;
+    pthread_mutex_unlock(&mutex);
 
     while (1) {
-        pck = receive_sock(sock);
-        printf("%s: %s\n", pck.sender, pck.msg);
-        if (strcmp(pck.msg, "quit") == 0) {
-            flag = -1;
-        }
+        memset(&packet, 0, sizeof(packet));
 
-        sprintf(pck.msg, "Message Received");
-        sprintf(pck.sender, "Server");
-        sprintf(pck.receiver, "Client");
-
-        send_sock(sock, pck);
-        if (flag == -1) {
+        int received = recv(sock, &packet, sizeof(packet), 0);
+        if (received < 0) {
+            pthread_mutex_lock(&mutex);
+            for (int i = 0; i < client_count; i++) {
+                if (clients[i] == sock) {
+                    client_count--;
+                    for (int j = i; j < client_count; j++) {
+                        clients[j] = clients[j+1];
+                    }
+                    break;
+                }
+            }
+            pthread_mutex_unlock(&mutex);
+            printf("Client disconnected\n");
             break;
         }
+        if (strcmp(packet.msg, "quit") == 0) {
+            pthread_mutex_lock(&mutex);
+            for (int i = 0; i < client_count; i++) {
+                if (clients[i] == sock) {
+                    client_count--;
+                    for (int j = i; j < client_count; j++) {
+                        clients[j] = clients[j+1];
+                    }
+                    break;
+                }
+            }
+            pthread_mutex_unlock(&mutex);
+            printf("%s quit\n", packet.sender);
+            break;
+        }
+        send_message(packet, sock);
     }
 
-    shutdown(sock, SHUT_RDWR);
     close(sock);
+    pthread_exit(NULL);
 }
 
-struct sending_packet receive_sock(int sock) {
-    struct sending_packet pck;
-    recv(sock, (struct sending_packet *)&pck, sizeof(pck), 0);
-    return pck;
-}
-
-void send_sock(int sock, struct sending_packet pck) {
-    send(sock, (struct sending_packet *)&pck, sizeof(pck), 0);
+void send_message(struct sending_packet pck, int sender_sock) {
+    pthread_mutex_lock(&mutex);
+    for (int i = 0; i < client_count; i++) {
+        if (clients[i] != sender_sock) {
+            send(clients[i], &pck, sizeof(pck), 0);
+        }
+    }
+    pthread_mutex_unlock(&mutex);
 }
