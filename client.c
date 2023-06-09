@@ -62,6 +62,11 @@ int main() {
         if (strcmp(buf, "quit\n") == 0) {
             flag = -1;
         }
+        if (strcmp(buf, "0\n") == 0) {
+            printf("Input nickname: ");
+            scanf("%s", nickname);
+            continue;
+        }
 
         sprintf(pck.msg, "%s", buf);
         sprintf(pck.sender, "%s", nickname);
@@ -75,7 +80,6 @@ int main() {
     }
 
     shutdown(sock_fd, SHUT_WR);
-    pthread_join(recv_thread, NULL);
     free(buf);
     return 0;
 }
@@ -86,7 +90,7 @@ void *receive_thread(void *arg) {
 
     while (1) {
         if (recv(sock_fd, &pck, sizeof(pck), 0) > 0) {
-            printf("[%s]: %s\n", pck.sender, pck.msg);
+            printf("[%s]: %s", pck.sender, pck.msg);
         }
     }
 

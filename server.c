@@ -69,6 +69,7 @@ int main() {
             perror("pthread_create failed: ");
             exit(1);
         }
+        printf("chatter (%d/100)",client_count+1);
     }
 
     close(s_sock_fd);
@@ -78,6 +79,7 @@ int main() {
 void *handle_thread(void *arg) {
     int sock = *((int *)arg);
     struct sending_packet packet;
+    int flag = 0;
 
     pthread_mutex_lock(&mutex);
     clients[client_count++] = sock;
@@ -87,7 +89,7 @@ void *handle_thread(void *arg) {
         memset(&packet, 0, sizeof(packet));
 
         int received = recv(sock, &packet, sizeof(packet), 0);
-        if (received < 0) {
+        if (received <= 0) {
             pthread_mutex_lock(&mutex);
             for (int i = 0; i < client_count; i++) {
                 if (clients[i] == sock) {
@@ -102,7 +104,7 @@ void *handle_thread(void *arg) {
             printf("Client disconnected\n");
             break;
         }
-        if (strcmp(packet.msg, "quit") == 0) {
+        if (strcmp(packet.msg, "quit\n") == 0) {
             pthread_mutex_lock(&mutex);
             for (int i = 0; i < client_count; i++) {
                 if (clients[i] == sock) {
@@ -115,9 +117,15 @@ void *handle_thread(void *arg) {
             }
             pthread_mutex_unlock(&mutex);
             printf("%s quit\n", packet.sender);
+            flag = -1;
+        } else {
+            printf("[%s]: %s",packet.sender,packet.msg);
+        }
+        
+        send_message(packet, sock);
+        if (flag == -1) {
             break;
         }
-        send_message(packet, sock);
     }
 
     close(sock);
