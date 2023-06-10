@@ -16,8 +16,9 @@ struct sending_packet {
     char msg[1024];
 };
 
-void *receive_thread(void *arg);
-char nickname[20];
+void *receive_message(void *arg);
+char nickname[20]; //쓰레드에서도 접근을 위해 main 밖에서 정의
+//닉네임을 쓰레드에서도 사용하므로, 상호배제를 위한 mutex
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int main() {
@@ -49,12 +50,19 @@ int main() {
         exit(1);
     }
 
+    printf("<<<< Chat client >>>>\n");
+    printf("Server Port: %d\n", port);
+    printf("======= Mode =======\n");
+    printf("  0:  change Nickname\n");
+    printf("  1:  whisper mode\n");
+    printf("<<<<     Log     >>>>\n");
+
     printf("Input nickname: ");
     scanf("%s", nickname);
     printf("%s has entered.\n", nickname);
 
     pthread_t recv_thread;
-    pthread_create(&recv_thread, NULL, receive_thread, (void *)&sock_fd);
+    pthread_create(&recv_thread, NULL, receive_message, (void *)&sock_fd);
     
     pthread_mutex_lock(&mutex);
     sprintf(pck.msg, "has entred");
@@ -115,7 +123,7 @@ int main() {
     return 0;
 }
 
-void *receive_thread(void *arg) {
+void *receive_message(void *arg) {
     int sock_fd = *((int *)arg);
     struct sending_packet pck;
 

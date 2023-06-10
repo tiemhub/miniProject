@@ -6,10 +6,10 @@
 #include <unistd.h>
 #include <pthread.h>
 
-#define MAX_CLIENTS 100 // Maximum number of clients
+#define MAX_CLIENTS 100 // 최대 접속 가능한 클라이언트 수
 
-int clients[MAX_CLIENTS]; // Array to store client sockets
-int client_count = 0; // Number of connected clients
+int clients[MAX_CLIENTS]; // 클라이언트 소켓 보관을 위한 어레이
+int client_count = 0;
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 struct sending_packet {
