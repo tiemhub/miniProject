@@ -6,6 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <ctype.h>
 
 #define BUFFER_SIZE 1024
 
@@ -16,6 +17,8 @@ struct sending_packet {
 };
 
 void *receive_thread(void *arg);
+char nickname[20];
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 int main() {
     struct sockaddr_in s_addr;
@@ -24,7 +27,7 @@ int main() {
     struct sending_packet pck;
     int check;
     int port = 8080;
-    char nickname[20];
+    
 
     sock_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (sock_fd <= 0) {
@@ -52,26 +55,54 @@ int main() {
 
     pthread_t recv_thread;
     pthread_create(&recv_thread, NULL, receive_thread, (void *)&sock_fd);
+    
+    pthread_mutex_lock(&mutex);
+    sprintf(pck.msg, "has entred");
+    sprintf(pck.sender, "%s", nickname);
+    sprintf(pck.receiver, "Server");
+    pthread_mutex_unlock(&mutex);
+    
+
+    send(sock_fd, (struct sending_packet *)&pck, sizeof(pck), 0);
 
     int flag = 0;
     size_t line_len = 0;
     while (1) {
         getline(&buf, &line_len, stdin);
-        buf[line_len - 1] = '\0';
-
-        if (strcmp(buf, "quit\n") == 0) {
-            flag = -1;
-        }
-        if (strcmp(buf, "0\n") == 0) {
-            printf("Input nickname: ");
-            scanf("%s", nickname);
-            continue;
-        }
+        buf[strcspn(buf, "\n")] = '\0';
 
         sprintf(pck.msg, "%s", buf);
         sprintf(pck.sender, "%s", nickname);
-        sprintf(pck.receiver, "Server");
+        sprintf(pck.receiver, "Server"); //server로 보내면 모두 받는다.
+        
+        if (strcmp(buf, "quit") == 0) {
+            flag = -1;
+        }
 
+        if (strcmp(buf, "0") == 0) { //0을 입력할 경우, 닉네임 변경
+            pthread_mutex_lock(&mutex);
+            sprintf(pck.msg, "%s change name to this name", nickname);
+            printf("Input nickname: ");
+            scanf("%s", nickname);
+            sprintf(pck.sender, "%s", nickname);
+            pthread_mutex_unlock(&mutex);
+        }
+
+        if (strcmp(buf, "1") == 0) { //1을 입력할 경우, 귓속말을 보냄
+            printf("whisper to: ");
+            scanf("%s",pck.receiver);
+            getchar();
+            getline(&buf, &line_len, stdin);
+            buf[strcspn(buf, "\n")] = '\0';
+            sprintf(pck.msg,"(whisper) %s",buf);
+        }
+
+        if (strcmp(pck.msg,"") == 0) {
+            continue;
+        }
+
+        
+    
         send(sock_fd, (struct sending_packet *)&pck, sizeof(pck), 0);
 
         if (flag == -1) {
@@ -90,7 +121,13 @@ void *receive_thread(void *arg) {
 
     while (1) {
         if (recv(sock_fd, &pck, sizeof(pck), 0) > 0) {
-            printf("[%s]: %s", pck.sender, pck.msg);
+            pthread_mutex_lock(&mutex);
+            //서버로 오거나, 나에게 온 메세지만 출력
+            if ((strcmp(pck.receiver,"Server")==0) || (strcmp(pck.receiver,nickname)==0)){
+                printf("[%s]: %s\n", pck.sender, pck.msg);
+            }
+            pthread_mutex_unlock(&mutex);
+
         }
     }
 

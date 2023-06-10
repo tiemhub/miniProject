@@ -69,7 +69,7 @@ int main() {
             perror("pthread_create failed: ");
             exit(1);
         }
-        printf("chatter (%d/100)",client_count+1);
+        printf("chatter (%d/100)\n",client_count+1);
     }
 
     close(s_sock_fd);
@@ -116,11 +116,11 @@ void *handle_thread(void *arg) {
                 }
             }
             pthread_mutex_unlock(&mutex);
-            printf("%s quit\n", packet.sender);
             flag = -1;
-        } else {
-            printf("[%s]: %s",packet.sender,packet.msg);
         }
+        
+        printf("[%s]: %s\n",packet.sender,packet.msg);
+        
         
         send_message(packet, sock);
         if (flag == -1) {
