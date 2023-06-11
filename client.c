@@ -8,8 +8,6 @@
 #include <pthread.h>
 #include <ctype.h>
 
-#define BUFFER_SIZE 1024
-
 struct sending_packet {
     char sender[1024];
     char receiver[1024];
@@ -111,7 +109,9 @@ int main() {
             sprintf(pck.msg,"left the group %s",group);
             send(sock_fd, (struct sending_packet *)&pck, sizeof(pck), 0);
             printf("change group to: ");
+            pthread_mutex_lock(&mutex);
             scanf("%s",group);
+            pthread_mutex_unlock(&mutex);
             sprintf(pck.msg,"join the group %s",group);
             sprintf(pck.receiver,"%s",group);
         } else if (strcmp(buf, "3") == 0) {
