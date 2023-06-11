@@ -17,7 +17,9 @@ struct sending_packet {
 };
 
 void *receive_message(void *arg);
+void printUpdate(int port,char *nickname, char *group);
 char nickname[20]; //쓰레드에서도 접근을 위해 main 밖에서 정의
+char group[20];
 //닉네임을 쓰레드에서도 사용하므로, 상호배제를 위한 mutex
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
@@ -28,6 +30,7 @@ int main() {
     struct sending_packet pck;
     int check;
     int port = 8080;
+    sprintf(group,"Server");//기본 그룹 설정
     
 
     sock_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -55,6 +58,8 @@ int main() {
     printf("======= Mode =======\n");
     printf("  0:  change Nickname\n");
     printf("  1:  whisper mode\n");
+    printf("  2:  change Group\n");
+    printf("  3:  clear&update\n");
     printf("<<<<     Log     >>>>\n");
 
     printf("Input nickname: ");
@@ -81,7 +86,7 @@ int main() {
 
         sprintf(pck.msg, "%s", buf);
         sprintf(pck.sender, "%s", nickname);
-        sprintf(pck.receiver, "Server"); //server로 보내면 모두 받는다.
+        sprintf(pck.receiver, "%s", group); //자신이 속한 그룹으로만 보낸다.
         
         if (strcmp(buf, "quit") == 0) {
             flag = -1;
@@ -94,16 +99,27 @@ int main() {
             scanf("%s", nickname);
             sprintf(pck.sender, "%s", nickname);
             pthread_mutex_unlock(&mutex);
-        }
-
-        if (strcmp(buf, "1") == 0) { //1을 입력할 경우, 귓속말을 보냄
+        } else if (strcmp(buf, "1") == 0) { //1을 입력할 경우, 귓속말을 보냄
             printf("whisper to: ");
             scanf("%s",pck.receiver);
             getchar();
             getline(&buf, &line_len, stdin);
             buf[strcspn(buf, "\n")] = '\0';
             sprintf(pck.msg,"(whisper) %s",buf);
+        } else if (strcmp(buf, "2") == 0) {
+            //기존 그룹에 나갔다는 메세지 송신
+            sprintf(pck.msg,"left the group %s",group);
+            send(sock_fd, (struct sending_packet *)&pck, sizeof(pck), 0);
+            printf("change group to: ");
+            scanf("%s",group);
+            sprintf(pck.msg,"join the group %s",group);
+            sprintf(pck.receiver,"%s",group);
+        } else if (strcmp(buf, "3") == 0) {
+            system("clear");
+            printUpdate(port,nickname,group);
+            continue;
         }
+
 
         if (strcmp(pck.msg,"") == 0) {
             continue;
@@ -130,8 +146,8 @@ void *receive_message(void *arg) {
     while (1) {
         if (recv(sock_fd, &pck, sizeof(pck), 0) > 0) {
             pthread_mutex_lock(&mutex);
-            //서버로 오거나, 나에게 온 메세지만 출력
-            if ((strcmp(pck.receiver,"Server")==0) || (strcmp(pck.receiver,nickname)==0)){
+            //자신이 속한 그룹으로 오거나, 나에게 온 메세지만 출력
+            if ((strcmp(pck.receiver,group)==0) || (strcmp(pck.receiver,nickname)==0)){
                 printf("[%s]: %s\n", pck.sender, pck.msg);
             }
             pthread_mutex_unlock(&mutex);
@@ -140,4 +156,18 @@ void *receive_message(void *arg) {
     }
 
     pthread_exit(NULL);
+}
+
+void printUpdate(int port,char *nickname, char *group) {
+    printf("<<<< Chat client >>>>\n");
+    printf("Server Port: %d\n", port);
+    printf("======= Mode =======\n");
+    printf("  0:  change Nickname\n");
+    printf("  1:  whisper mode\n");
+    printf("  2:  change Group\n");
+    printf("  3:  clear&update\n");
+    printf("======= Info =======\n");
+    printf("Nickname : %s\n", nickname);
+    printf("Group: %s\n", group);
+    printf("<<<<     Log     >>>>\n");
 }

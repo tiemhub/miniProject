@@ -119,7 +119,7 @@ void *handle_thread(void *arg) {
             flag = -1;
         }
         
-        printf("[%s]: %s\n",packet.sender,packet.msg);
+        printf("(%s)[%s]: %s\n",packet.receiver,packet.sender,packet.msg);
         
         
         send_message(packet, sock);
